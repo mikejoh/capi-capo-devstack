@@ -2,7 +2,7 @@
 
 Try out your favourite tools locally! :rocket:
 
-This repository shows you step-by-step on how to run a complete environment locally to test Cluster API, Cluster API Provider OpenStack (on `kind`) and a minimal Devstack (local OpenStack).
+This repository shows you step-by-step on how to run a complete environment locally to test [Cluster API](https://github.com/kubernetes-sigs/cluster-api), [Cluster API Provider OpenStack](https://github.com/kubernetes-sigs/cluster-api-provider-openstack) (on `kind`) and a minimal [Devstack](https://github.com/openstack/devstack) (local OpenStack).
 
 I've performed these steps in KVM on Arch.
 
