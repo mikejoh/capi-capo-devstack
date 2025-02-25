@@ -85,14 +85,14 @@ wget https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-provider-open
 source /tmp/env.rcclouds.yaml openstack
 ```
 
-Export more enviroment variables that we'll need to define the workload cluster:
+Export more environment variables that we'll need to define the workload cluster:
 
 ```
 export KUBERNETES_VERSION=v1.31.4
 export OPENSTACK_DNS_NAMESERVERS=1.1.1.1
 export OPENSTACK_FAILURE_DOMAIN=nova
-export OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR=m1.small
-export OPENSTACK_NODE_MACHINE_FLAVOR=m1.small
+export OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR=m1.medium
+export OPENSTACK_NODE_MACHINE_FLAVOR=m1.medium
 export OPENSTACK_IMAGE_NAME=ubuntu-2204-kube-v1.31.4
 export OPENSTACK_SSH_KEY_NAME=k8s-devstack01
 export OPENSTACK_EXTERNAL_NETWORK_ID=<ID>
@@ -100,6 +100,8 @@ export CLUSTER_NAME=k8s-devstack01
 export CONTROL_PLANE_MACHINE_COUNT=1
 export WORKER_MACHINE_COUNT=0
 ```
+
+_Please note that you'll need to fetch the `public` network ID and add it to the `OPENSTACK_EXTERNAL_NETWORK_ID` environment variable. Also the flavor needs to have at least 2 cores otherwise `kubeadm` will fail, this can be ignored from a `kubeadm` perspective but that's not covered here._
 
 10. Generate the cluster manifests and apply them in the `kind` cluster:
 
@@ -121,8 +123,56 @@ clusterctl get kubeconfig k8s-devstack01 > k8s-devstack01.kubeconfig
 export KUBECONFIG=k8s-devstack01.kubeconfig
 ```
 
-13. Install an external cloud-provider:
+You should now be able to reach the cluster running within the DevStack environment! 🎉
+
+13. Install a CNI (Cilium), manually for now:
+
+_Please note that we're replacing `kube-proxy` with Cilium at the same time._
 
 ```
-TODO!
+helm repo add cilium https://helm.cilium.io/
+```
+
+```
+kubectl -n kube-system delete ds kube-proxy
+kubectl -n kube-system delete cm kube-proxy
+```
+
+`k8sServiceHost` below should be set to the control-plane VM IP, not the floating IP:
+
+```
+helm upgrade --install cilium cilium/cilium --version 1.17.1 \
+  --namespace kube-system \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=10.6.0.177 \
+  --set k8sServicePort=6443 \
+  --set hubble.enabled=false \
+  --set envoy.enabled=false \
+  --set operator.replicas=1
+```
+
+14. Install the OpenStack cloud provider:
+
+```
+git clone --depth=1 https://github.com/kubernetes-sigs/cluster-api-provider-openstack.git
+```
+
+Generate the external cloud provider configuration:
+
+```
+./templates/create_cloud_conf.sh ~/Downloads/clouds.yaml openstack > /tmp/cloud.conf
+```
+
+Create the needed secret:
+
+```
+kuebctl create secret -n kube-system generic cloud-config --from-file=/tmp/cloud.conf
+```
+
+Create the needed Kubernetes resources for the OpenStack cloud provider:
+
+```
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-roles.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-role-bindings.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/openstack-cloud-controller-manager-ds.yaml
 ```
