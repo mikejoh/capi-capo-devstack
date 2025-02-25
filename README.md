@@ -20,19 +20,29 @@ kind create cluster
 
 4. Enable connectivity between `kind` Pods and the Devstack VM:
 
+Note which bridge the Devstack VM are attached to:
+
 ```
-# Note which bridge the Devstack VM are attached to:
 sudo virsh net-info devstack_net
-# Create a new Docker mcvlan network using the same subnet and gateway as configured for the devstack_net in KVM, example:
-docker network create -d macvlan \
-                    --subnet=192.168.11.0/24 \
-                    --gateway=192.168.11.1 \
-                    -o parent=virbr2 devstack_net
-# Connect the kind container to this network
-docker network connect devstack_net ad299039ac46
 ```
 
-Make sure you test connectivity to the Devstack VM with e.g. `curl` before proceeding.
+Create a new Docker mcvlan network using the same subnet and gateway as configured for the devstack_net in KVM, example:
+
+```
+docker network create -d macvlan --subnet=192.168.11.0/24 --gateway=192.168.11.1 -o parent=virbr2 devstack_net
+```
+
+Connect the kind container to this network
+
+```
+docker network connect devstack_net <container ID>
+```
+
+_Please make sure you test the connectivity between a Pod in the `kind` cluster and the Devstack VM IP with e.g. `curl` before proceeding!_
+
+```
+
+```
 
 5. Download `clusterctl`, change the destination directory if needed:
 
@@ -40,7 +50,7 @@ Make sure you test connectivity to the Devstack VM with e.g. `curl` before proce
 curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.9.4/clusterctl-linux-amd64 -o ~/.local/bin/clusterctl
 ```
 
-6. Install CAPO in managment cluster (`kind`):
+6. Install CAPO in the managment cluster (`kind`):
 
 ```
 export CLUSTER_TOPOLOGY=true
@@ -48,7 +58,7 @@ kubectl apply -f https://github.com/k-orc/openstack-resource-controller/releases
 clusterctl init --infrastructure openstack
 ```
 
-7. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html) with either the qemu builder or (untested at the moment) the [OpenStack builder](https://image-builder.sigs.k8s.io/capi/providers/openstack-remote). I built an image like this:
+7. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html), i used the `qemu` builder or (untested at the moment) the [OpenStack builder](https://image-builder.sigs.k8s.io/capi/providers/openstack-remote). The `build-qemu-ubuntu-2404` make target was broken when writing this. I built an `22.04` image like this:
 
 ```
 git clone https://github.com/kubernetes-sigs/image-builder.git
@@ -74,7 +84,7 @@ openstack image create "ubuntu-2204-kube-v1.31.4" \
 openstack keypair create --type ssh k8s-devstack01
 ```
 
-Note the private SSH key and store it somewhere.
+Take a note of that the private SSH key and store it somewhere safe.
 
 10. Install needed CAPO prerequisites and generate cluster manifests:
 
@@ -127,7 +137,7 @@ You should now be able to reach the cluster running within the DevStack environm
 
 13. Install a CNI (Cilium), manually for now:
 
-_Please note that we're replacing `kube-proxy` with Cilium at the same time._
+_Please note that we're replacing `kube-proxy` with Cilium at the same time in the steps below._
 
 ```
 helm repo add cilium https://helm.cilium.io/
@@ -157,7 +167,7 @@ helm upgrade --install cilium cilium/cilium --version 1.17.1 \
 git clone --depth=1 https://github.com/kubernetes-sigs/cluster-api-provider-openstack.git
 ```
 
-Generate the external cloud provider configuration:
+Generate the external cloud provider configuration with the provided helper script:
 
 ```
 ./templates/create_cloud_conf.sh ~/Downloads/clouds.yaml openstack > /tmp/cloud.conf
@@ -176,3 +186,5 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-ope
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-role-bindings.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/openstack-cloud-controller-manager-ds.yaml
 ```
+
+If everything went as expected the `coredns` Pods would be scheduled since they didn't tolerate the special taint added by Kubernetes, this taint is removed when the external cloud provider successfully initializes all nodes.
