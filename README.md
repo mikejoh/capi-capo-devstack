@@ -8,7 +8,7 @@ I've performed these steps in KVM on Arch.
 
 ## Step-by-step
 
-1. Deploy Devstack locally, see this [repository](https://github.com/mikejoh/devstack-on-kvm) on how to this on top of KVM.
+1. Deploy Devstack locally, see this [repository](https://github.com/mikejoh/devstack-on-kvm) on how to do this on top of KVM.
 
 2. Download the OpenStack RC file from Horizon, browse to Devstack IP and login, click in the top righ corner on the `admin` name and then choose `OpenStack RC File`. Source this file and enable your `pip` or `pipenv` where the OpenStack client is installed! Also download the `clouds.yaml` for later use with CAPI + CAPO!
 
