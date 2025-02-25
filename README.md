@@ -188,3 +188,16 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-ope
 ```
 
 If everything went as expected the `coredns` Pods would be scheduled since they didn't tolerate the special taint added by Kubernetes, this taint is removed when the external cloud provider successfully initializes all nodes.
+
+```
+kubectl get pods -A
+NAMESPACE     NAME                                                         READY   STATUS    RESTARTS   AGE
+kube-system   cilium-operator-cd959bc7b-ctbr7                              1/1     Running   0          25m
+kube-system   cilium-vwzg6                                                 1/1     Running   0          26m
+kube-system   coredns-7c65d6cfc9-n2zrh                                     1/1     Running   0          74m
+kube-system   coredns-7c65d6cfc9-qj97n                                     1/1     Running   0          74m
+kube-system   etcd-k8s-devstack01-control-plane-hmjss                      1/1     Running   0          74m
+kube-system   kube-apiserver-k8s-devstack01-control-plane-hmjss            1/1     Running   0          74m
+kube-system   kube-controller-manager-k8s-devstack01-control-plane-hmjss   1/1     Running   0          74m
+kube-system   kube-scheduler-k8s-devstack01-control-plane-hmjss            1/1     Running   0          74m
+```
