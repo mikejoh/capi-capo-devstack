@@ -41,7 +41,7 @@ docker network connect devstack_net <container ID>
 _Please make sure you test the connectivity between a Pod in the `kind` cluster and the Devstack VM IP with e.g. `curl` before proceeding!_
 
 ```
-
+kubectl run curl-pod --image=radial/busyboxplus:curl -i --tty --rm
 ```
 
 5. Download `clusterctl`, change the destination directory if needed:
