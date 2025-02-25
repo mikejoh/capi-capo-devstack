@@ -1,4 +1,4 @@
-# CAPI + CAPO + Devstack
+# Running Cluster API and Cluster API Provider for OpenStack ontop of Devstack!
 
 Try out your favourite tools locally! :rocket:
 
