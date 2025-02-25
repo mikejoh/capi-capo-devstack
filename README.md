@@ -1,6 +1,6 @@
 # Running Cluster API and Cluster API Provider for OpenStack ontop of Devstack!
 
-Try out your favourite tools locally! :rocket:
+Try out your favourite tools **totally** **locally** **finally**! :rocket:
 
 This repository shows you step-by-step on how to run a complete environment locally to test [Cluster API](https://github.com/kubernetes-sigs/cluster-api), [Cluster API Provider OpenStack](https://github.com/kubernetes-sigs/cluster-api-provider-openstack) (on `kind`) and a minimal [Devstack](https://github.com/openstack/devstack) (local OpenStack).
 
