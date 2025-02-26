@@ -192,12 +192,13 @@ If everything went as expected the `coredns` Pods would be scheduled since they 
 ```
 kubectl get pods -A
 NAMESPACE     NAME                                                         READY   STATUS    RESTARTS   AGE
-kube-system   cilium-operator-cd959bc7b-ctbr7                              1/1     Running   0          25m
-kube-system   cilium-vwzg6                                                 1/1     Running   0          26m
-kube-system   coredns-7c65d6cfc9-n2zrh                                     1/1     Running   0          74m
-kube-system   coredns-7c65d6cfc9-qj97n                                     1/1     Running   0          74m
-kube-system   etcd-k8s-devstack01-control-plane-hmjss                      1/1     Running   0          74m
-kube-system   kube-apiserver-k8s-devstack01-control-plane-hmjss            1/1     Running   0          74m
-kube-system   kube-controller-manager-k8s-devstack01-control-plane-hmjss   1/1     Running   0          74m
-kube-system   kube-scheduler-k8s-devstack01-control-plane-hmjss            1/1     Running   0          74m
+kube-system   cilium-operator-cd959bc7b-ctbr7                              1/1     Running   0          13h
+kube-system   cilium-vwzg6                                                 1/1     Running   0          13h
+kube-system   coredns-7c65d6cfc9-n2zrh                                     1/1     Running   0          14h
+kube-system   coredns-7c65d6cfc9-qj97n                                     1/1     Running   0          14h
+kube-system   etcd-k8s-devstack01-control-plane-hmjss                      1/1     Running   0          14h
+kube-system   kube-apiserver-k8s-devstack01-control-plane-hmjss            1/1     Running   0          14h
+kube-system   kube-controller-manager-k8s-devstack01-control-plane-hmjss   1/1     Running   0          14h
+kube-system   kube-scheduler-k8s-devstack01-control-plane-hmjss            1/1     Running   0          14h
+kube-system   openstack-cloud-controller-manager-q8sbk                     1/1     Running   0          13h
 ```
