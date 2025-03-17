@@ -144,24 +144,14 @@ helm repo add cilium https://helm.cilium.io/
 ```
 
 ```
-kubectl -n kube-system delete ds kube-proxy
-kubectl -n kube-system delete cm kube-proxy
-```
-
-`k8sServiceHost` below should be set to the control-plane VM IP, not the floating IP:
-
-```
 helm upgrade --install cilium cilium/cilium --version 1.17.1 \
   --namespace kube-system \
-  --set kubeProxyReplacement=true \
-  --set k8sServiceHost=10.6.0.177 \
-  --set k8sServicePort=6443 \
   --set hubble.enabled=false \
   --set envoy.enabled=false \
   --set operator.replicas=1
 ```
 
-14. Install the OpenStack cloud provider:
+14. Install the OpenStack Cloud Provider:
 
 ```
 git clone --depth=1 https://github.com/kubernetes-sigs/cluster-api-provider-openstack.git
@@ -176,7 +166,7 @@ Generate the external cloud provider configuration with the provided helper scri
 Create the needed secret:
 
 ```
-kuebctl create secret -n kube-system generic cloud-config --from-file=/tmp/cloud.conf
+kubectl create secret -n kube-system generic cloud-config --from-file=/tmp/cloud.conf
 ```
 
 Create the needed Kubernetes resources for the OpenStack cloud provider:
