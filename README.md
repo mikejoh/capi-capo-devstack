@@ -6,6 +6,10 @@ This repository shows you step-by-step on how to run a complete environment loca
 
 I've performed these steps in KVM on Arch.
 
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/d03632c2-0511-4d64-b49a-550b2dd49cb7" alt="">
+</div>
+
 ## Step-by-step
 
 1. Deploy Devstack locally, see this [repository](https://github.com/mikejoh/devstack-on-kvm) on how to do this on top of KVM.
