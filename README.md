@@ -72,7 +72,7 @@ _Make sure you've prepared your `clouds.yaml` accordingly._
 
 ```
 wget https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-provider-openstack/master/templates/env.rc -O /tmp/env.rc
-source /tmp/env.rcclouds.yaml openstack
+source /tmp/env.rc clouds.yaml openstack
 ```
 
 Export more environment variables that we'll need to define the workload cluster:
