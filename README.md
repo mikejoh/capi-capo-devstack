@@ -148,6 +148,8 @@ Generate the external cloud provider configuration with the provided helper scri
 ./templates/create_cloud_conf.sh ~/Downloads/clouds.yaml openstack > /tmp/cloud.conf
 ```
 
+_Note that if you want support for creating `Service` of `type: LoadBalancer` you'll need to configure this in the `cloud.conf` and re-create the secret._
+
 Create the needed secret:
 
 ```
@@ -157,23 +159,14 @@ kubectl create secret -n kube-system generic cloud-config --from-file=/tmp/cloud
 Create the needed Kubernetes resources for the OpenStack cloud provider:
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-roles.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-role-bindings.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/openstack-cloud-controller-manager-ds.yaml
+helm repo add cpo https://kubernetes.github.io/cloud-provider-openstack
+helm repo update
+helm upgrade --install \
+  openstack-ccm cpo/openstack-cloud-controller-manager \
+  --namespace kube-system \
+  --values occm-values.yaml
 ```
 
-If everything went as expected the `coredns` Pods would be scheduled since they didn't tolerate the special taint added by Kubernetes, this taint is removed when the external cloud provider successfully initializes all nodes.
+If everything went as expected pending Pods should've been scheduled and all Pods shall have IP addresses assigned to them.
 
-```
-kubectl get pods -A
-NAMESPACE     NAME                                                         READY   STATUS    RESTARTS   AGE
-kube-system   cilium-operator-cd959bc7b-ctbr7                              1/1     Running   0          13h
-kube-system   cilium-vwzg6                                                 1/1     Running   0          13h
-kube-system   coredns-7c65d6cfc9-n2zrh                                     1/1     Running   0          14h
-kube-system   coredns-7c65d6cfc9-qj97n                                     1/1     Running   0          14h
-kube-system   etcd-k8s-devstack01-control-plane-hmjss                      1/1     Running   0          14h
-kube-system   kube-apiserver-k8s-devstack01-control-plane-hmjss            1/1     Running   0          14h
-kube-system   kube-controller-manager-k8s-devstack01-control-plane-hmjss   1/1     Running   0          14h
-kube-system   kube-scheduler-k8s-devstack01-control-plane-hmjss            1/1     Running   0          14h
-kube-system   openstack-cloud-controller-manager-q8sbk                     1/1     Running   0          13h
-```
+15. Done! 🚀
