@@ -122,8 +122,6 @@ You should now be able to reach the cluster running within the DevStack environm
 
 13. Install a CNI (Cilium), manually for now:
 
-_Please note that we're replacing `kube-proxy` with Cilium at the same time in the steps below._
-
 ```
 helm repo add cilium https://helm.cilium.io/
 ```
