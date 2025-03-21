@@ -7,7 +7,7 @@ This repository shows you step-by-step on how to run a complete environment loca
 I've performed these steps in KVM on Arch.
 
 <div align="center">
-  <img src="" alt="">
+  <img src="https://github.com/user-attachments/assets/f6eed09d-52fd-4e4a-83da-0d2909bff894" alt="">
 </div>
 
 ## Step-by-step
