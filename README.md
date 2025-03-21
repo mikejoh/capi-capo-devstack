@@ -1,8 +1,16 @@
-# Running Cluster API and Cluster API Provider for OpenStack ontop of Devstack
+# CAPI, CAPO and DevStack!
 
 Try out your favourite tools and tech stack locally! :rocket:
 
-This repository shows you step-by-step on how to run a complete environment locally to test [Cluster API](https://github.com/kubernetes-sigs/cluster-api), [Cluster API Provider OpenStack](https://github.com/kubernetes-sigs/cluster-api-provider-openstack) (on `minikube`) and a minimal [Devstack](https://github.com/openstack/devstack) (local OpenStack).
+This repository shows you step-by-step on how to run a complete environment locally to test:
+* [Cluster API](https://github.com/kubernetes-sigs/cluster-api)
+* [Cluster API Provider OpenStack](https://github.com/kubernetes-sigs/cluster-api-provider-openstack)
+* [Minikube](https://minikube.sigs.k8s.io/docs/start/?arch=%2Flinux%2Fx86-64%2Fstable%2Fbinary+download)
+* [DevStack](https://github.com/openstack/devstack)
+
+## Overview
+
+This drawing shows a brief overview on what we're trying to achieve:
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/f6eed09d-52fd-4e4a-83da-0d2909bff894" alt="">
