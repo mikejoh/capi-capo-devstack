@@ -44,12 +44,12 @@ kubectl apply -f https://github.com/k-orc/openstack-resource-controller/releases
 clusterctl init --infrastructure openstack
 ```
 
-6. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html), i used the `qemu` builder or (untested at the moment) the [OpenStack builder](https://image-builder.sigs.k8s.io/capi/providers/openstack-remote). The `build-qemu-ubuntu-2404` make target was broken when writing this. I built an `22.04` image like this:
+6. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html), used the `qemu` builder:
 
 ```
 git clone https://github.com/kubernetes-sigs/image-builder.git
-image-builder/images/capi/
-make build-qemu-ubuntu-2204
+cd image-builder/images/capi/
+make build-qemu-ubuntu-2404
 ```
 
 7. Upload the built image to OpenStack if you built it using anything else than the OpenStack builder:
@@ -60,8 +60,7 @@ openstack image create "ubuntu-2204-kube-v1.31.6" \
   --disk-format qcow2 \
   --property os_type=linux \
   --property os_distro=ubuntu2204 \
-  --public \
-  --file output/ubuntu-2204-kube-v1.31.4/ubuntu-2204-kube-v1.31.6
+  --file output/ubuntu-2204-kube-v1.31.6/ubuntu-2204-kube-v1.31.6
 ```
 
 8. Create a SSH keypair:
