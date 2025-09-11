@@ -95,6 +95,8 @@ clouds:
     identity_api_version: 3
 ```
 
+Use the `env.rc` utility script to export a common set of environment variables to be used with `clusterctl init` later on.
+
 ```bash
 wget https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-provider-openstack/master/templates/env.rc -O /tmp/env.rc
 source /tmp/env.rc clouds.yaml openstack
