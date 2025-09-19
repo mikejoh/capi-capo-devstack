@@ -46,7 +46,8 @@ clusterctl init --infrastructure openstack
 
 Notes:
 * `clusterctl init` is dependant on configuration, either via environment variables or a [configuration file](https://cluster-api.sigs.k8s.io/clusterctl/configuration).
-* `cert-manager` is installed during `init`, this might not be wanted if you already have one running.
+* `cert-manager` is installed during `init`, this might not be wanted if you already have one running: https://github.com/kubernetes-sigs/cluster-api/pull/7290/files
+
 * The default bootstrap providers are `kubeadm`, you can select others.
 
 6. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html), used the `qemu` builder:
