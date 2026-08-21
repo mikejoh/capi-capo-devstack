@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  sources:
+  - repoURL: https://helm.cilium.io/
+    chart: cilium
+    targetRevision: 1.19.3
+    helm:
+      releaseName: cilium
+      valueFiles:
+      - $values/argocd/cilium-values.yaml
+      parameters:
+      - name: k8sServiceHost
+        value: REPLACE_WITH_CONTROL_PLANE_ENDPOINT_HOST
+      - name: k8sServicePort
+        value: "6443"
+  - repoURL: https://github.com/mikejoh/capi-capo-devstack
+    targetRevision: HEAD
+    ref: values
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true

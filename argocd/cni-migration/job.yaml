@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cni-migration
+  namespace: kube-system
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      serviceAccountName: cni-migration
+      restartPolicy: OnFailure
+      containers:
+      - name: migrate
+        image: bitnami/kubectl:1.35
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -euo pipefail
+
+          echo "Waiting for Cilium DaemonSet to be fully ready..."
+          for i in $(seq 1 60); do
+            d=$(kubectl -n kube-system get ds cilium -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+            r=$(kubectl -n kube-system get ds cilium -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0)
+            if [ "${d}" -gt 0 ] && [ "${d}" = "${r}" ]; then
+              echo "Cilium ready on ${r}/${d} nodes."
+              break
+            fi
+            echo "Cilium ${r}/${d} ready; sleeping 10s..."
+            sleep 10
+          done
+          [ "${d}" = "${r}" ] || { echo "Timed out waiting for Cilium"; exit 1; }
+
+          echo "Deleting Flannel resources..."
+          kubectl delete namespace kube-flannel --ignore-not-found --wait=true
+          kubectl delete clusterrole flannel --ignore-not-found
+          kubectl delete clusterrolebinding flannel --ignore-not-found
+          kubectl delete podsecuritypolicy psp.flannel.unprivileged --ignore-not-found 2>/dev/null || true
+
+          echo "Rolling non-hostNetwork workloads in kube-system and argocd..."
+          for ns in kube-system argocd; do
+            for kind in deploy sts; do
+              for name in $(kubectl -n "${ns}" get "${kind}" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+                echo "Restarting ${ns}/${kind}/${name}"
+                kubectl -n "${ns}" rollout restart "${kind}" "${name}" || true
+              done
+            done
+          done
+
+          echo "Migration complete."

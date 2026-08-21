@@ -1,0 +1,20 @@
+kubeProxyReplacement: true
+
+cni:
+  exclusive: true
+
+ipam:
+  mode: cluster-pool
+  operator:
+    clusterPoolIPv4PodCIDRList: ["192.168.0.0/16"]
+    clusterPoolIPv4MaskSize: 24
+
+hubble:
+  enabled: false
+envoy:
+  enabled: false
+operator:
+  replicas: 1
+
+MTU: 1450
+tunnel: vxlan

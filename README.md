@@ -7,6 +7,7 @@ This repository shows you step-by-step on how to run a complete environment loca
 * [Cluster API Provider OpenStack](https://github.com/kubernetes-sigs/cluster-api-provider-openstack)
 * [Minikube](https://minikube.sigs.k8s.io/docs/start/?arch=%2Flinux%2Fx86-64%2Fstable%2Fbinary+download)
 * [DevStack](https://github.com/openstack/devstack)
+* [Cilium](https://cilium.io/) as CNI, installed and managed by [ArgoCD](https://argo-cd.readthedocs.io/)
 
 ## Overview
 
@@ -15,6 +16,8 @@ This drawing shows a brief overview on what we're trying to achieve:
 <div align="center">
   <img src="https://github.com/user-attachments/assets/f6eed09d-52fd-4e4a-83da-0d2909bff894" alt="">
 </div>
+
+The workload cluster is brought up with kube-proxy disabled at the kubeadm layer. A minimal Flannel install bootstraps the pod network so ArgoCD can run; ArgoCD then installs Cilium (with `kubeProxyReplacement: true`) and, via a second Application, runs a one-shot Job that deletes Flannel and rolling-restarts pods so they re-IP via Cilium.
 
 ## Step-by-step
 
@@ -33,40 +36,40 @@ minikube start --driver=kvm2 --kvm-network=devstack_net
 4. Download `clusterctl`, change the destination directory if needed:
 
 ```bash
-curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.9.5/clusterctl-linux-amd64 -o ~/.local/bin/clusterctl
+curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.13.0/clusterctl-linux-amd64 -o ~/.local/bin/clusterctl
 ```
 
 5. Install CAPO in the managment cluster (`minikube`):
 
 ```bash
 export CLUSTER_TOPOLOGY=true
-kubectl apply -f https://github.com/k-orc/openstack-resource-controller/releases/latest/download/install.yaml
+kubectl apply --server-side -f https://github.com/k-orc/openstack-resource-controller/releases/latest/download/install.yaml
 clusterctl init --infrastructure openstack
 ```
 
 Notes:
 * `clusterctl init` is dependant on configuration, either via environment variables or a [configuration file](https://cluster-api.sigs.k8s.io/clusterctl/configuration).
 * `cert-manager` is installed during `init`, this might not be wanted if you already have one running: https://github.com/kubernetes-sigs/cluster-api/pull/7290/files
-
 * The default bootstrap providers are `kubeadm`, you can select others.
+* ORC (OpenStack Resource Controller) is a required prerequisite for CAPO `v0.12+`; the `--server-side` apply avoids the "last-applied-configuration too long" failure on the large ORC install manifest.
 
 6. Build an image using [`image-builder`](https://image-builder.sigs.k8s.io/capi/providers/openstack.html), used the `qemu` builder:
 
 ```bash
 git clone https://github.com/kubernetes-sigs/image-builder.git
 cd image-builder/images/capi/
-make build-qemu-ubuntu-2404
+make build-qemu-ubuntu-2404 KUBERNETES_VERSION=v1.35.3
 ```
 
 7. Upload the built image to OpenStack if you built it using anything else than the OpenStack builder:
 
 ```bash
-openstack image create "ubuntu-2204-kube-v1.31.6" \
+openstack image create "ubuntu-2404-kube-v1.35.3" \
   --progress \
   --disk-format qcow2 \
   --property os_type=linux \
-  --property os_distro=ubuntu2204 \
-  --file output/ubuntu-2204-kube-v1.31.6/ubuntu-2204-kube-v1.31.6
+  --property os_distro=ubuntu2404 \
+  --file output/ubuntu-2404-kube-v1.35.3/ubuntu-2404-kube-v1.35.3
 ```
 
 8. Create a SSH keypair:
@@ -79,22 +82,14 @@ Take a note of that the private SSH key and store it somewhere safe.
 
 9. Install needed CAPO prerequisites and generate cluster manifests:
 
-Make sure you've prepared your `clouds.yaml` accordingly, here's an example:
+Make sure you've prepared your `clouds.yaml` accordingly. Copy the bundled template and fill in your DevStack credentials:
 
 ```bash
-clouds:
-  openstack:
-    auth:
-      auth_url: http://<DevStack IP>:5000//v3
-      username: "demo"
-      password: "secret"
-      project_name: "admin"
-      project_id: "<ID>"
-      user_domain_name: "Default"
-    region_name: "RegionOne"
-    interface: "public"
-    identity_api_version: 3
+cp clouds.yaml.example clouds.yaml
+# then edit clouds.yaml and set auth_url, username, password, project_name, project_id, user_domain_name, region_name, identity_api_version
 ```
+
+The real `clouds.yaml` is gitignored so credentials don't get committed.
 
 Use the `env.rc` utility script to export a common set of environment variables to be used with `clusterctl init` later on.
 
@@ -106,17 +101,17 @@ source /tmp/env.rc clouds.yaml openstack
 Export more environment variables that we'll need to define the workload cluster:
 
 ```bash
-export KUBERNETES_VERSION=v1.31.6
+export KUBERNETES_VERSION=v1.35.3
 export OPENSTACK_DNS_NAMESERVERS=1.1.1.1
 export OPENSTACK_FAILURE_DOMAIN=nova
 export OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR=m1.medium
 export OPENSTACK_NODE_MACHINE_FLAVOR=m1.medium
-export OPENSTACK_IMAGE_NAME=ubuntu-2204-kube-v1.31.6
+export OPENSTACK_IMAGE_NAME=ubuntu-2404-kube-v1.35.3
 export OPENSTACK_SSH_KEY_NAME=k8s-devstack01
 export OPENSTACK_EXTERNAL_NETWORK_ID=<ID>
 export CLUSTER_NAME=k8s-devstack01
-export CONTROL_PLANE_MACHINE_COUNT=1
-export WORKER_MACHINE_COUNT=0
+export CONTROL_PLANE_MACHINE_COUNT=3
+export WORKER_MACHINE_COUNT=3
 ```
 
 _Please note that you'll need to fetch the `public` network ID and add it to the `OPENSTACK_EXTERNAL_NETWORK_ID` environment variable. Also the flavor needs to have at least 2 cores otherwise `kubeadm` will fail, this can be ignored from a `kubeadm` perspective but that's not covered here._
@@ -127,6 +122,8 @@ _Please note that you'll need to fetch the `public` network ID and add it to the
 clusterctl generate cluster k8s-devstack01 --infrastructure openstack > k8s-devstack01.yaml
 kubectl apply -f k8s-devstack01.yaml
 ```
+
+_The checked-in `k8s-devstack01.yaml` is a reference of what this tutorial expects: CAPI core kinds on `v1beta2`, kube-proxy disabled via `KubeadmControlPlane.spec.kubeadmConfigSpec.clusterConfiguration.proxy.disabled: true`, and Cilium-appropriate security-group rules (udp/8472, tcp/4240, ICMP) on `OpenStackCluster`. If you re-generate with a different `clusterctl` version, port those edits back in before applying._
 
 11. Check the status of the cluster using `clusterctl`, also check the logs of, primarily, the `capo-controller`:
 
@@ -143,24 +140,22 @@ Cluster/k8s-devstack01                                             True         
 
 ```bash
 clusterctl get kubeconfig k8s-devstack01 > k8s-devstack01.kubeconfig
-export KUBECONFIG=k8s-devstack01.kubeconfig
+export KUBECONFIG=$PWD/k8s-devstack01.kubeconfig
 ```
 
 You should now be able to reach the cluster running within the DevStack environment! 🎉
 
-13. Install a CNI (Cilium), manually for now:
+Nodes will be `NotReady` at this point — that's expected: we've asked kubeadm to skip kube-proxy, and we haven't installed a CNI yet. The next step fixes it.
+
+13. Bootstrap the pod network with Flannel (temporary, so ArgoCD can run):
 
 ```bash
-helm repo add cilium https://helm.cilium.io/
+kubectl apply -f argocd/flannel.yaml
+kubectl -n kube-flannel rollout status ds/kube-flannel-ds --timeout=5m
+kubectl get nodes
 ```
 
-```bash
-helm upgrade --install cilium cilium/cilium --version 1.17.1 \
-  --namespace kube-system \
-  --set hubble.enabled=false \
-  --set envoy.enabled=false \
-  --set operator.replicas=1
-```
+Nodes should go `Ready`. You should see **no** `kube-proxy` DaemonSet in `kube-system` — that proves the kubeadm-level `proxy.disabled: true` took effect.
 
 14. Install the OpenStack Cloud Provider:
 
@@ -171,7 +166,7 @@ git clone --depth=1 https://github.com/kubernetes-sigs/cluster-api-provider-open
 Generate the external cloud provider configuration with the provided helper script:
 
 ```bash
-./templates/create_cloud_conf.sh ~/Downloads/clouds.yaml openstack > /tmp/cloud.conf
+./cluster-api-provider-openstack/templates/create_cloud_conf.sh clouds.yaml openstack > /tmp/cloud.conf
 ```
 
 _Note that if you want support for creating `Service` of `type: LoadBalancer` you'll need to configure this in the `cloud.conf` and re-create the secret._
@@ -190,9 +185,62 @@ helm repo update
 helm upgrade --install \
   openstack-ccm cpo/openstack-cloud-controller-manager \
   --namespace kube-system \
+  --version 2.35.0 \
   --values occm-values.yaml
 ```
 
-If everything went as expected pending Pods should've been scheduled and all Pods shall have IP addresses assigned to them.
+OCCM clears the `node.cloudprovider.kubernetes.io/uninitialized:NoSchedule` taint on each node.
 
-15. Done! 🚀
+15. Install ArgoCD:
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace --version 9.5.11
+kubectl -n argocd rollout status deploy/argocd-server --timeout=5m
+```
+
+16. Apply the ArgoCD app-of-apps — this installs Cilium (sync wave 0) and the Flannel-cleanup Job (sync wave 1):
+
+First, substitute the control-plane endpoint host into `argocd/apps/cilium-app.yaml`:
+
+```bash
+API_ENDPOINT=$(kubectl config view --raw \
+  -o jsonpath='{.clusters[0].cluster.server}' | sed -E 's#https?://##; s#:.*##')
+sed -i "s/REPLACE_WITH_CONTROL_PLANE_ENDPOINT_HOST/${API_ENDPOINT}/" \
+  argocd/apps/cilium-app.yaml
+```
+
+Then apply the root Application:
+
+```bash
+kubectl apply -f argocd/root-app.yaml
+```
+
+_Note: commit the sed'd `cilium-app.yaml` back to Git (or set the value via your own values-override repo) so ArgoCD's own reconciliation doesn't flip it back. For a local tutorial the local edit is fine — ArgoCD reads it from this repo's `main` branch via the root app, so if you want drift-free steady state you need a branch/fork with the real endpoint._
+
+17. Watch the migration happen:
+
+```bash
+# Cilium installs first
+argocd app get cilium
+kubectl -n kube-system rollout status ds/cilium --timeout=10m
+
+# Then cni-migration runs
+argocd app get cni-migration
+kubectl -n kube-system logs job/cni-migration -f
+```
+
+Expected final state:
+
+```bash
+kubectl get ns kube-flannel      # -> not found
+kubectl -n kube-system get ds    # -> cilium only (no kube-proxy, no kube-flannel-ds)
+cilium status                    # -> KubeProxyReplacement: True
+helm ls -n kube-system           # -> cilium release present (now owned by ArgoCD)
+kubectl get pods -A -o wide      # -> all pods Running on 192.168.0.0/16, now via Cilium
+```
+
+18. Done! 🚀
+
+From now on, Cilium is managed via Git: bump `targetRevision` in `argocd/apps/cilium-app.yaml` to roll a new version, or edit `argocd/cilium-values.yaml` to change values. ArgoCD picks up the commit and syncs.
