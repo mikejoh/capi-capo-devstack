@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openbao
+  template:
+    metadata:
+      labels:
+        app: openbao
+    spec:
+      serviceAccountName: openbao
+      initContainers:
+        - name: fetch-openstack-plugin
+          image: curlimages/curl:8.11.1
+          command:
+            - sh
+            - -c
+            - |
+              set -euo pipefail
+              cd /tmp
+              curl -fsSL -o plugin.tar.gz \
+                https://github.com/vexxhost/vault-plugin-secrets-openstack/releases/download/v0.2.0/vault-plugin-secrets-openstack_0.2.0_linux_amd64.tar.gz
+              tar -xzf plugin.tar.gz -C /tmp
+              cp /tmp/vault-plugin-secrets-openstack /openbao/plugins/vault-plugin-secrets-openstack
+              chmod 0755 /openbao/plugins/vault-plugin-secrets-openstack
+          volumeMounts:
+            - name: plugins
+              mountPath: /openbao/plugins
+      containers:
+        - name: openbao
+          image: ghcr.io/openbao/openbao:2.6.2
+          args: ["server", "-config=/openbao/config/config.hcl"]
+          ports:
+            - containerPort: 8200
+              name: api
+          volumeMounts:
+            - name: config
+              mountPath: /openbao/config
+            - name: data
+              mountPath: /openbao/data
+            - name: plugins
+              mountPath: /openbao/plugins
+      volumes:
+        - name: config
+          configMap:
+            name: openbao-config
+        - name: data
+          emptyDir: {}
+        - name: plugins
+          emptyDir: {}

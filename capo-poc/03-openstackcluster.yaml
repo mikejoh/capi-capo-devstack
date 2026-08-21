@@ -1,0 +1,31 @@
+# Infra-only proof: no MachineDeployment/KubeadmControlPlane on purpose.
+# Goal here is proving capo-controller can reconcile real Neutron/Keystone
+# resources (network, subnet, router, security groups) using a credential
+# that was minted seconds ago by Vault, not a static clouds.yaml — not
+# proving a bootable node image (that's a separate, orthogonal step).
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: capo-poc
+  namespace: capo-poc
+spec:
+  identityRef:
+    type: ClusterIdentity
+    name: capo-poc
+    cloudName: openstack
+  managedSubnets:
+    - cidr: 10.6.0.0/24
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: capo-poc
+  namespace: capo-poc
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["10.7.0.0/16"]
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OpenStackCluster
+    name: capo-poc

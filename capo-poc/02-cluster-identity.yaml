@@ -1,0 +1,8 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OpenStackClusterIdentity
+metadata:
+  name: capo-poc
+spec:
+  secretRef:
+    name: capo-poc-clouds
+    namespace: capo-poc

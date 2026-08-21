@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-config
+  namespace: openbao
+data:
+  config.hcl: |
+    ui = true
+    disable_mlock = true
+    plugin_directory = "/openbao/plugins"
+
+    storage "file" {
+      path = "/openbao/data"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = "true"
+    }
+
+    api_addr = "http://127.0.0.1:8200"
