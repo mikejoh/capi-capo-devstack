@@ -1,0 +1,10 @@
+# Cluster-scoped (not namespaced) — name must be unique across every
+# cluster release, which .Values.clusterName already guarantees.
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OpenStackClusterIdentity
+metadata:
+  name: {{ .Values.clusterName }}
+spec:
+  secretRef:
+    name: {{ .Values.clusterName }}-clouds
+    namespace: {{ .Values.clusterName }}

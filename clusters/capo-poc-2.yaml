@@ -1,0 +1,13 @@
+# Second cluster, same OpenStack project (environment model — see
+# memory/area-openstack-tenancy-model.md in the planning repo for why),
+# proving the chart actually generates a working second cluster rather
+# than just being hand-waved as "templatable."
+clusterName: capo-poc-2
+openstack:
+  authUrl: "http://192.168.11.77/identity/v3"
+  regionName: "RegionOne"
+  projectId: "414778abdb234133acc2b4b95131074d"
+  memberRoleId: "a1955513adf147528c15cf4d2b9393ef"
+network:
+  managedSubnetCIDR: "10.6.1.0/24"
+  podCIDR: "10.9.0.0/16"

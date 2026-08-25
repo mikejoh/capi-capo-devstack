@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cluster
+description: >
+  Per-cluster bundle for the secret0 broker PoC: a Vault roleset (created by
+  a pre-install/pre-upgrade Job, since a roleset is a Vault API object, not
+  a Kubernetes manifest), the VaultDynamicSecret + ExternalSecret that turn
+  it into a clouds.yaml Secret, an OpenStackClusterIdentity, and a minimal
+  Cluster/OpenStackCluster referencing it. One values file per cluster; see
+  ../../clusters/*.yaml for examples and ../../argocd/apps/clusters-appset.yaml
+  for how ArgoCD generates one Application per values file.
+type: application
+version: 0.1.0

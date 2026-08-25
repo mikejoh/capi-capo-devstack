@@ -1,0 +1,44 @@
+# The GitOps automation itself: one Application per file in clusters/,
+# rendering templates/cluster-chart with that file as values. Add a new
+# cluster = add a new clusters/<name>.yaml and commit — no pipeline step,
+# no imperative `helm install`, ArgoCD notices the new file on its own
+# polling/webhook cycle and reconciles it like everything else it manages.
+#
+# Not yet wired into argocd/root-app.yaml (that only points at
+# argocd/apps/ for the Cilium/CNI-migration apps from the base tutorial) —
+# add this file's directory to the app-of-apps once you want this live
+# rather than just documented.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: clusters
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/mikejoh/capi-capo-devstack.git
+        revision: main
+        files:
+          - path: "clusters/*.yaml"
+  template:
+    metadata:
+      name: "cluster-{{ .path.filenameNormalized }}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/mikejoh/capi-capo-devstack.git
+        targetRevision: main
+        path: templates/cluster-chart
+        helm:
+          valueFiles:
+            - "../../{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

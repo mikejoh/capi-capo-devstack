@@ -1,0 +1,6 @@
+{{- if .Values.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ required "clusterName is required" .Values.clusterName }}
+{{- end }}

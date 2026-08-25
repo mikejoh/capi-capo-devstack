@@ -16,3 +16,15 @@ subjects:
   - kind: ServiceAccount
     name: openbao
     namespace: openbao
+---
+# Shared, created-once identity used by every per-cluster roleset-creation
+# Job (templates/cluster-chart/templates/vault-roleset-job.yaml). Lives here,
+# not in the per-cluster chart, so N cluster releases don't each try to own
+# (and collide on) the same ServiceAccount name. Needs no K8s RBAC of its
+# own — it only ever presents its own projected token to OpenBao, never
+# calls the K8s API.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-bootstrapper
+  namespace: openbao

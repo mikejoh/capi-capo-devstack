@@ -1,0 +1,14 @@
+# Reference only — this is the cluster in capo-poc/ (hand-written, not
+# Helm-managed). Documented here so the shape is comparable to a real
+# per-cluster values file, but don't `helm install` this one: the
+# Namespace/OpenStackCluster/etc it names already exist, created directly
+# via `kubectl apply -f capo-poc/`, and are not owned by any Helm release.
+clusterName: capo-poc
+openstack:
+  authUrl: "http://192.168.11.77/identity/v3"
+  regionName: "RegionOne"
+  projectId: "414778abdb234133acc2b4b95131074d"
+  memberRoleId: "a1955513adf147528c15cf4d2b9393ef"
+network:
+  managedSubnetCIDR: "10.6.0.0/24"
+  podCIDR: "10.7.0.0/16"

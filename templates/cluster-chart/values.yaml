@@ -1,0 +1,43 @@
+# Copy one of ../../clusters/*.yaml or write a new one — every value below
+# is meant to be overridden per cluster. Defaults here are unusable
+# on purpose (empty), so a missing override fails loudly at template time.
+
+clusterName: ""   # also used as the k8s namespace name and Vault roleset name suffix
+createNamespace: true
+
+openstack:
+  authUrl: ""          # e.g. http://192.168.11.77/identity/v3
+  regionName: "RegionOne"
+  projectId: ""        # OpenStack project this cluster's credentials are scoped to
+  memberRoleId: ""      # role id granted on that project (`openstack role show member -f value -c id`)
+
+# managed Neutron network for this cluster (CAPO's `managedSubnets`) — must
+# not overlap any other cluster's CIDR in the same OpenStack project/router.
+network:
+  managedSubnetCIDR: ""   # e.g. 10.6.1.0/24
+  podCIDR: "10.7.0.0/16"  # cluster.spec.clusterNetwork.pods.cidrBlocks
+
+vault:
+  address: "http://openbao.openbao.svc.cluster.local:8200"
+  leaseTTL: 120           # seconds — must be well above the mgmt cluster's
+                          # controller resync period (CAPO default: 10m) or
+                          # credentials expire before anything ever reads them
+  eso:
+    # OpenBao kubernetes-auth role ESO's ServiceAccount uses to *read*
+    # openstack/creds/<clusterName>-member. Shared across all clusters —
+    # policy is a glob (openstack/creds/*-member), not per-cluster.
+    mountPath: "kubernetes"
+    role: "eso"
+  bootstrapper:
+    # Separate, write-only-on-roleset role — deliberately cannot read any
+    # credential, only create/update rolesets. See openbao/setup.sh.
+    # The ServiceAccount is shared across every cluster release (created
+    # once in openbao/04-rbac.yaml, not by this chart) so N per-cluster
+    # Helm releases don't collide trying to own the same SA.
+    mountPath: "kubernetes"
+    role: "cluster-bootstrapper"
+    serviceAccountName: "cluster-bootstrapper"
+    serviceAccountNamespace: "openbao"
+
+externalSecret:
+  refreshInterval: "60s"   # keep well under vault.leaseTTL (50-75%, per ADR 0001)

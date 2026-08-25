@@ -1,0 +1,66 @@
+# Runs before the rest of the release: a roleset is a Vault API object, not
+# a k8s manifest, so it can't just be `kubectl apply`'d — this Job creates
+# it via OpenBao's HTTP API instead, authenticating with its own projected
+# ServiceAccount token (the shared cluster-bootstrapper SA, see
+# openbao/04-rbac.yaml) against a write-only OpenBao role that can create
+# rolesets but cannot read any credential — separate from ESO's read-only
+# "eso" role on purpose.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: roleset-{{ required "clusterName is required" .Values.clusterName }}
+  namespace: {{ required "vault.bootstrapper.serviceAccountNamespace is required" .Values.vault.bootstrapper.serviceAccountNamespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: {{ .Values.vault.bootstrapper.serviceAccountName }}
+      restartPolicy: Never
+      containers:
+        - name: ensure-roleset
+          image: curlimages/curl:8.11.1
+          env:
+            - name: VAULT_ADDR
+              value: {{ required "vault.address is required" .Values.vault.address | quote }}
+            - name: MOUNT_PATH
+              value: {{ .Values.vault.bootstrapper.mountPath | quote }}
+            - name: VAULT_ROLE
+              value: {{ .Values.vault.bootstrapper.role | quote }}
+            - name: ROLESET_NAME
+              value: "{{ .Values.clusterName }}-member"
+            - name: PROJECT_ID
+              value: {{ required "openstack.projectId is required" .Values.openstack.projectId | quote }}
+            - name: MEMBER_ROLE_ID
+              value: {{ required "openstack.memberRoleId is required" .Values.openstack.memberRoleId | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+
+              LOGIN_RESP=$(curl -sf -X POST "${VAULT_ADDR}/v1/auth/${MOUNT_PATH}/login" \
+                -d "{\"jwt\":\"${JWT}\",\"role\":\"${VAULT_ROLE}\"}")
+              CLIENT_TOKEN=$(echo "$LOGIN_RESP" | sed -n 's/.*"client_token":"\([^"]*\)".*/\1/p')
+              if [ -z "$CLIENT_TOKEN" ]; then
+                echo "kubernetes auth login failed: $LOGIN_RESP" >&2
+                exit 1
+              fi
+
+              # The plugin's `roles` field is TypeString, not a native JSON
+              # array — it wants a JSON-encoded *string* (this is what the
+              # `vault write ... roles=-<<EOF [...] EOF` CLI convenience
+              # syntax does under the hood). A raw JSON array here 400s with
+              # "expected type 'string', got unconvertible type '[]interface{}'".
+              ROLES_JSON="[{\"id\":\"${MEMBER_ROLE_ID}\"}]"
+              ROLES_ESCAPED=$(echo "$ROLES_JSON" | sed 's/"/\\"/g')
+
+              curl -sf -H "X-Vault-Token: ${CLIENT_TOKEN}" \
+                -X POST "${VAULT_ADDR}/v1/openstack/roleset/${ROLESET_NAME}" \
+                -d "{\"project_id\":\"${PROJECT_ID}\",\"roles\":\"${ROLES_ESCAPED}\"}"
+
+              echo "roleset ${ROLESET_NAME} ensured"
