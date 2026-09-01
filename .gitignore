@@ -1,2 +1,4 @@
 clouds.yaml
 *.kubeconfig
+.claude/
+.serena/
