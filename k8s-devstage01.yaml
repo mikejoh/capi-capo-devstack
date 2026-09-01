@@ -1,0 +1,409 @@
+# k8s-devstage01, sketched as pure CAPI/CAPO — a comparison against
+# ~/Repos/work/k8s-environments/clusters/k8s-devstage01/ (Terraform ->
+# rancher2 provider -> Rancher provisioning-v2, which generates CAPI +
+# CAPRKE2 + Rancher's own rke-machine.cattle.io node-driver CRDs under the
+# hood). This file is a learning/comparison exercise, not a production port:
+# it deliberately diverges from the real cluster in a few places, called out
+# below and inline. Latest stable providers at time of writing: CAPI
+# v1.14.0, CAPO v0.14.7 (v1beta1 — v0.15.0-beta.0/v1beta2 is still
+# prerelease, see k8s-devstack01.yaml's sibling notes on positive-polarity
+# bool fields for why that matters later).
+#
+# Deltas from the real k8s-devstage01, and why:
+#
+# 1. Bootstrap/control-plane provider is kubeadm (KubeadmControlPlane /
+#    KubeadmConfigTemplate), not RKE2 — matches this repo's existing
+#    k8s-devstack01.yaml pattern. Real devstage01 runs RKE2
+#    (rke2_version v1.33.8+rke2r1); the vanilla-CAPI equivalent uses
+#    Kubernetes v1.33.8 directly.
+#
+# 2. Control plane lives in ONE region (DC07) instead of being stretched
+#    1-per-region across DC06/DC07/DC10 like the real cluster.
+#    KubeadmControlPlane (and CAPRKE2's RKE2ControlPlane) owns exactly one
+#    machineTemplate/identityRef for ALL its replicas — there is no
+#    per-replica override in vanilla CAPI. Rancher gets around this by NOT
+#    using RKE2ControlPlane's built-in machine-owning model at all: it
+#    creates one MachineDeployment per machine pool (control-plane pools
+#    included), each with its own region/credentials, and just labels the
+#    resulting Machines `etcd-role`/`control-plane-role`
+#    (rancher/rancher pkg/controllers/provisioningv2/provisioningcluster/
+#    template.go). Rancher's own planner (pkg/capr/planner) then does the
+#    actual etcd/CP orchestration across those independently-regioned
+#    MachineDeployments — a Rancher-specific extension on top of CAPI, not
+#    something stock KubeadmControlPlane can do. Worker pools below DO
+#    replicate the real per-region split, since OpenStackMachineTemplate
+#    supports a per-machine identityRef.
+#
+# 3. All three regions share one Keystone ("Main") and one service account
+#    (svc-k8s-devstage01) — DC06/DC07/DC10 only differ by `region_name` in
+#    clouds.yaml, not by credentials. The per-region Secrets below are
+#    therefore identical except for that one field.
+#
+# 4. No Octavia-backed API LB (apiServerLoadBalancer disabled) — real infra
+#    fronts the API server with an external F5 BIG-IP VIP. Mirrors this
+#    repo's REPLACE_WITH_CONTROL_PLANE_ENDPOINT_HOST placeholder pattern
+#    (see argocd/apps/cilium-app.yaml) instead.
+#
+# 5. Out of scope entirely (no vanilla-CAPI equivalent designed here, needs
+#    separate tooling): Rancher HelmChart-CRD addon installs
+#    (etgcloud-controller-manager, argocd-manager's static bootstrap SA —
+#    itself a "secret0"-shaped problem), F5 healthcheck wiring, Netbox IP/DNS
+#    allocation, and RKE2's built-in S3 etcd snapshotting. Cilium's
+#    native-routing + BGP profile (files/chart-values.yaml) vs this repo's
+#    VXLAN argocd/cilium-values.yaml is a values-only delta and would reuse
+#    the same ArgoCD app-of-apps pattern.
+#
+# 6. Audit policy/webhook files below are placeholders (path + marker
+#    content only) — the real policy content lives outside this repo.
+apiVersion: v1
+data:
+  cacert: Cg==
+  clouds.yaml: Y2xvdWRzOgogIG9wZW5zdGFjazoKICAgIGF1dGg6CiAgICAgIGF1dGhfdXJsOiAiaHR0cHM6Ly9rZXlzdG9uZS5tYWluLmV0cmF2ZWxpLmludGVybmFsL3YzIgogICAgICB1c2VybmFtZTogInN2Yy1rOHMtZGV2c3RhZ2UwMSIKICAgICAgcGFzc3dvcmQ6ICI8UkVEQUNURUQ+IgogICAgICBwcm9qZWN0X25hbWU6ICJrOHMtZGV2dGVzdCIKICAgICAgcHJvamVjdF9kb21haW5fbmFtZTogImRlZmF1bHQiCiAgICAgIHVzZXJfZG9tYWluX25hbWU6ICJEZWZhdWx0IgogICAgcmVnaW9uX25hbWU6ICJEQzA3Igo=
+kind: Secret
+metadata:
+  labels:
+    clusterctl.cluster.x-k8s.io/move: "true"
+  name: k8s-devstage01-cloud-config
+  namespace: default
+---
+# Same creds as above, region_name: DC06 only. Used by the wdc06 worker
+# OpenStackMachineTemplate's identityRef.
+apiVersion: v1
+data:
+  cacert: Cg==
+  clouds.yaml: Y2xvdWRzOgogIG9wZW5zdGFjazoKICAgIGF1dGg6CiAgICAgIGF1dGhfdXJsOiAiaHR0cHM6Ly9rZXlzdG9uZS5tYWluLmV0cmF2ZWxpLmludGVybmFsL3YzIgogICAgICB1c2VybmFtZTogInN2Yy1rOHMtZGV2c3RhZ2UwMSIKICAgICAgcGFzc3dvcmQ6ICI8UkVEQUNURUQ+IgogICAgICBwcm9qZWN0X25hbWU6ICJrOHMtZGV2dGVzdCIKICAgICAgcHJvamVjdF9kb21haW5fbmFtZTogImRlZmF1bHQiCiAgICAgIHVzZXJfZG9tYWluX25hbWU6ICJEZWZhdWx0IgogICAgcmVnaW9uX25hbWU6ICJEQzA2Igo=
+kind: Secret
+metadata:
+  labels:
+    clusterctl.cluster.x-k8s.io/move: "true"
+  name: k8s-devstage01-cloud-config-dc06
+  namespace: default
+---
+# Same creds as above, region_name: DC10 only. Used by the wdc10 worker
+# OpenStackMachineTemplate's identityRef.
+apiVersion: v1
+data:
+  cacert: Cg==
+  clouds.yaml: Y2xvdWRzOgogIG9wZW5zdGFjazoKICAgIGF1dGg6CiAgICAgIGF1dGhfdXJsOiAiaHR0cHM6Ly9rZXlzdG9uZS5tYWluLmV0cmF2ZWxpLmludGVybmFsL3YzIgogICAgICB1c2VybmFtZTogInN2Yy1rOHMtZGV2c3RhZ2UwMSIKICAgICAgcGFzc3dvcmQ6ICI8UkVEQUNURUQ+IgogICAgICBwcm9qZWN0X25hbWU6ICJrOHMtZGV2dGVzdCIKICAgICAgcHJvamVjdF9kb21haW5fbmFtZTogImRlZmF1bHQiCiAgICAgIHVzZXJfZG9tYWluX25hbWU6ICJEZWZhdWx0IgogICAgcmVnaW9uX25hbWU6ICJEQzEwIgo=
+kind: Secret
+metadata:
+  labels:
+    clusterctl.cluster.x-k8s.io/move: "true"
+  name: k8s-devstage01-cloud-config-dc10
+  namespace: default
+---
+# Shared by all three worker MachineDeployments below — content is
+# identical per pool (only the region/network/identity live on the
+# OpenStackMachineTemplate side), so one KubeadmConfigTemplate covers all.
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfigTemplate
+metadata:
+  name: k8s-devstage01-md
+  namespace: default
+spec:
+  template:
+    spec:
+      files: []
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            cloud-provider: external
+            provider-id: openstack:///'{{ instance_id }}'
+          name: '{{ local_hostname }}'
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: k8s-devstage01
+  namespace: default
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.169.0.0/16
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: KubeadmControlPlane
+    name: k8s-devstage01-control-plane
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OpenStackCluster
+    name: k8s-devstage01
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: k8s-devstage01-md-dc06
+  namespace: default
+spec:
+  clusterName: k8s-devstage01
+  replicas: 1
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfigTemplate
+          name: k8s-devstage01-md
+      clusterName: k8s-devstage01
+      failureDomain: dc06
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: k8s-devstage01-md-dc06
+      version: v1.33.8
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: k8s-devstage01-md-dc07
+  namespace: default
+spec:
+  clusterName: k8s-devstage01
+  replicas: 2
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfigTemplate
+          name: k8s-devstage01-md
+      clusterName: k8s-devstage01
+      failureDomain: dc07
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: k8s-devstage01-md-dc07
+      version: v1.33.8
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: k8s-devstage01-md-dc10
+  namespace: default
+spec:
+  clusterName: k8s-devstage01
+  replicas: 1
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfigTemplate
+          name: k8s-devstage01-md
+      clusterName: k8s-devstage01
+      failureDomain: dc10
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: k8s-devstage01-md-dc10
+      version: v1.33.8
+---
+# Single region (DC07) for all 3 control-plane replicas — see delta #2 in
+# the header comment for why this can't be region-stretched like the real
+# cluster's control plane.
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: KubeadmControlPlane
+metadata:
+  name: k8s-devstage01-control-plane
+  namespace: default
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        certSANs:
+        - api.devstage01.k8s.etgcloud.io
+        extraArgs:
+        - name: audit-policy-file
+          value: /etc/kubernetes/audit-policy.yaml
+        - name: audit-webhook-config-file
+          value: /etc/kubernetes/audit-webhook-config.yaml
+        - name: audit-webhook-batch-max-size
+          value: "10"
+        - name: audit-webhook-batch-max-wait
+          value: 5s
+        extraVolumes:
+        - name: audit-policy
+          hostPath: /etc/kubernetes/audit-policy.yaml
+          mountPath: /etc/kubernetes/audit-policy.yaml
+          readOnly: true
+          pathType: File
+        - name: audit-webhook-config
+          hostPath: /etc/kubernetes/audit-webhook-config.yaml
+          mountPath: /etc/kubernetes/audit-webhook-config.yaml
+          readOnly: true
+          pathType: File
+      controllerManager:
+        extraArgs:
+        - name: cloud-provider
+          value: external
+      networking:
+        serviceSubnet: 10.192.4.0/23
+      proxy:
+        disabled: true
+    files:
+    # Placeholders — supply the real audit policy/webhook config content
+    # for this environment; not carried over from files/global-config.yaml.
+    - path: /etc/kubernetes/audit-policy.yaml
+      content: "# placeholder audit policy\n"
+      permissions: "0600"
+    - path: /etc/kubernetes/audit-webhook-config.yaml
+      content: "# placeholder audit webhook config\n"
+      permissions: "0600"
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+          provider-id: openstack:///'{{ instance_id }}'
+        name: '{{ local_hostname }}'
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+          provider-id: openstack:///'{{ instance_id }}'
+        name: '{{ local_hostname }}'
+  machineTemplate:
+    infrastructureRef:
+      apiGroup: infrastructure.cluster.x-k8s.io
+      kind: OpenStackMachineTemplate
+      name: k8s-devstage01-control-plane
+  replicas: 3
+  version: v1.33.8
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: k8s-devstage01
+  namespace: default
+spec:
+  # No Octavia LB — real infra fronts the API with an external F5 BIG-IP
+  # VIP. controlPlaneEndpoint.host is filled in the same way
+  # argocd/apps/cilium-app.yaml's REPLACE_WITH_CONTROL_PLANE_ENDPOINT_HOST
+  # placeholder is, once the VIP is allocated.
+  apiServerLoadBalancer:
+    enabled: false
+  controlPlaneEndpoint:
+    host: REPLACE_WITH_CONTROL_PLANE_ENDPOINT_HOST
+    port: 6443
+  externalNetwork:
+    id: asdf
+  identityRef:
+    cloudName: openstack
+    name: k8s-devstage01-cloud-config
+  managedSecurityGroups:
+    allNodesSecurityGroupRules:
+    - description: Allow ICMP from cluster pod/service CIDR
+      direction: ingress
+      etherType: IPv4
+      name: cluster-cidr ICMP
+      protocol: icmp
+      remoteManagedGroups:
+      - controlplane
+      - worker
+    - description: Allow TCP from cluster pod/service CIDR
+      direction: ingress
+      etherType: IPv4
+      name: cluster-cidr TCP
+      protocol: tcp
+      remoteManagedGroups:
+      - controlplane
+      - worker
+    - description: Allow UDP from cluster pod/service CIDR
+      direction: ingress
+      etherType: IPv4
+      name: cluster-cidr UDP
+      protocol: udp
+      remoteManagedGroups:
+      - controlplane
+      - worker
+---
+# Pre-existing per-DC network (OTA-TEST-K8S-DEVSTAGE01-DC07-VM), attached
+# via ports rather than a CAPO-managed subnet — matches how the real
+# cluster's networks are provisioned outside CAPO. identityRef is omitted
+# here since it falls back to OpenStackCluster's (also region DC07).
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: k8s-devstage01-control-plane
+  namespace: default
+spec:
+  template:
+    spec:
+      flavor: k8s.c4.m16.d80
+      image:
+        filter:
+          name: ubuntu-24.04-minimal-cloudimg-amd64-k8s-cis
+      ports:
+      - network:
+          filter:
+            name: OTA-TEST-K8S-DEVSTAGE01-DC07-VM
+      sshKeyName: dummy-test
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: k8s-devstage01-md-dc06
+  namespace: default
+spec:
+  template:
+    spec:
+      flavor: k8s.c4.m16.d80
+      identityRef:
+        cloudName: openstack
+        name: k8s-devstage01-cloud-config-dc06
+      image:
+        filter:
+          name: ubuntu-24.04-minimal-cloudimg-amd64-k8s-cis
+      ports:
+      - network:
+          filter:
+            name: OTA-TEST-K8S-DEVSTAGE01-DC06-VM
+      sshKeyName: dummy-test
+---
+# No identityRef override — DC07 is the same region as the cluster-level
+# identity, so this pool inherits OpenStackCluster's identityRef.
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: k8s-devstage01-md-dc07
+  namespace: default
+spec:
+  template:
+    spec:
+      flavor: k8s.c4.m16.d80
+      image:
+        filter:
+          name: ubuntu-24.04-minimal-cloudimg-amd64-k8s-cis
+      ports:
+      - network:
+          filter:
+            name: OTA-TEST-K8S-DEVSTAGE01-DC07-VM
+      sshKeyName: dummy-test
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: k8s-devstage01-md-dc10
+  namespace: default
+spec:
+  template:
+    spec:
+      flavor: k8s.c4.m16.d80
+      identityRef:
+        cloudName: openstack
+        name: k8s-devstage01-cloud-config-dc10
+      image:
+        filter:
+          name: ubuntu-24.04-minimal-cloudimg-amd64-k8s-cis
+      ports:
+      - network:
+          filter:
+            name: OTA-TEST-K8S-DEVSTAGE01-DC10-VM
+      sshKeyName: dummy-test
