@@ -19,9 +19,16 @@ network:
 
 vault:
   address: "http://openbao.openbao.svc.cluster.local:8200"
-  leaseTTL: 120           # seconds — must be well above the mgmt cluster's
-                          # controller resync period (CAPO default: 10m) or
-                          # credentials expire before anything ever reads them
+  leaseTTL: 300           # seconds — informational only (set once, globally,
+                          # by openbao/setup.sh, not per-release). Must
+                          # comfortably outlast CAPO's own Octavia
+                          # load-balancer active-wait poll inside a single
+                          # OpenStackCluster reconcile (~2min observed) — at
+                          # the original 120s the credential could be
+                          # revoked mid-poll, failing with a 404 "Could not
+                          # find Application Credential" instead of a clean
+                          # retry. Only matters if apiServerLoadBalancer is
+                          # enabled; capo-poc/capo-poc-2 don't hit this.
   eso:
     # OpenBao kubernetes-auth role ESO's ServiceAccount uses to *read*
     # openstack/creds/<clusterName>-member. Shared across all clusters —
