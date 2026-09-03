@@ -1,0 +1,88 @@
+# One-shot: shares the shared external network into this cluster's project
+# via Neutron RBAC (`access_as_external`) so routers/floating IPs in this
+# project can use it. Uses the root credential — see
+# docs/least-privilege-openstack-credentials.md for the policy this needs
+# (create_rbac_policy). Not idempotent at the API level (POST always makes a
+# new object), so this checks first.
+#
+# Sync-wave 1: runs after Project/User/RoleAssignment/ApplicationCredential
+# (wave 0) — needs the Project's real Keystone ID, looked up live via an
+# initContainer rather than a hardcoded value (see
+# docs/least-privilege-openstack-credentials.md's ordering notes).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: network-rbac-<cluster>
+  namespace: <cluster>
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: openstack-provisioner
+      restartPolicy: Never
+      volumes:
+        - name: shared
+          emptyDir: {}
+      initContainers:
+        - name: lookup-project-id
+          image: bitnami/kubectl:1.35
+          volumeMounts:
+            - {name: shared, mountPath: /shared}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              until [ "$(kubectl get project <cluster> \
+                -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')" = "True" ]; do
+                echo "waiting for Project/<cluster> to become Available..."
+                sleep 5
+              done
+              kubectl get project <cluster> -o jsonpath='{.status.id}' > /shared/project-id
+      containers:
+        - name: network-rbac
+          image: curlimages/curl:8.11.1
+          volumeMounts:
+            - {name: shared, mountPath: /shared}
+          env:
+            - name: AUTH_URL
+              value: "http://192.168.11.77/identity/v3"
+            - name: EXTERNAL_NETWORK_ID
+              value: "<external-network-id>"
+            - name: OS_APPLICATION_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef: {name: root-creds, key: application_credential_id}
+            - name: OS_APPLICATION_CREDENTIAL_SECRET
+              valueFrom:
+                secretKeyRef: {name: root-creds, key: application_credential_secret}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              CLUSTER_PROJECT_ID=$(cat /shared/project-id)
+
+              TOKEN=$(curl -sf -X POST "${AUTH_URL}/auth/tokens" \
+                -H "Content-Type: application/json" \
+                -d "{\"auth\":{\"identity\":{\"methods\":[\"application_credential\"],\"application_credential\":{\"id\":\"${OS_APPLICATION_CREDENTIAL_ID}\",\"secret\":\"${OS_APPLICATION_CREDENTIAL_SECRET}\"}}}}" \
+                -D - -o /dev/null | sed -n 's/^[Xx]-[Ss]ubject-[Tt]oken: *//p' | tr -d '\r')
+
+              NEUTRON_URL="http://192.168.11.77/networking/v2.0"
+
+              EXISTING=$(curl -sf -H "X-Auth-Token: ${TOKEN}" \
+                "${NEUTRON_URL}/rbac-policies?object_id=${EXTERNAL_NETWORK_ID}" \
+                | grep -o "\"target_tenant\": *\"${CLUSTER_PROJECT_ID}\"" || true)
+
+              if [ -n "$EXISTING" ]; then
+                echo "RBAC policy already exists for project ${CLUSTER_PROJECT_ID} on network ${EXTERNAL_NETWORK_ID}"
+                exit 0
+              fi
+
+              curl -sf -H "X-Auth-Token: ${TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${NEUTRON_URL}/rbac-policies" \
+                -d "{\"rbac_policy\":{\"object_id\":\"${EXTERNAL_NETWORK_ID}\",\"object_type\":\"network\",\"action\":\"access_as_external\",\"target_tenant\":\"${CLUSTER_PROJECT_ID}\"}}"
+
+              echo "RBAC policy created"

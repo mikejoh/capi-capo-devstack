@@ -1,0 +1,75 @@
+# One-shot: sets compute + network quota for this cluster's project. Uses
+# the root credential — needs update_quota on both nova and neutron (see
+# docs/least-privilege-openstack-credentials.md). PUT semantics — naturally
+# idempotent, safe to re-run.
+#
+# Sync-wave 1: same reasoning as 01-network-rbac-job.yaml — runs after
+# Project exists, looks up its real Keystone ID live via an initContainer.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quota-<cluster>
+  namespace: <cluster>
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: openstack-provisioner
+      restartPolicy: Never
+      volumes:
+        - name: shared
+          emptyDir: {}
+      initContainers:
+        - name: lookup-project-id
+          image: bitnami/kubectl:1.35
+          volumeMounts:
+            - {name: shared, mountPath: /shared}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              until [ "$(kubectl get project <cluster> \
+                -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')" = "True" ]; do
+                echo "waiting for Project/<cluster> to become Available..."
+                sleep 5
+              done
+              kubectl get project <cluster> -o jsonpath='{.status.id}' > /shared/project-id
+      containers:
+        - name: quota
+          image: curlimages/curl:8.11.1
+          volumeMounts:
+            - {name: shared, mountPath: /shared}
+          env:
+            - name: AUTH_URL
+              value: "http://192.168.11.77/identity/v3"
+            - name: OS_APPLICATION_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef: {name: root-creds, key: application_credential_id}
+            - name: OS_APPLICATION_CREDENTIAL_SECRET
+              valueFrom:
+                secretKeyRef: {name: root-creds, key: application_credential_secret}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              CLUSTER_PROJECT_ID=$(cat /shared/project-id)
+
+              TOKEN=$(curl -sf -X POST "${AUTH_URL}/auth/tokens" \
+                -H "Content-Type: application/json" \
+                -d "{\"auth\":{\"identity\":{\"methods\":[\"application_credential\"],\"application_credential\":{\"id\":\"${OS_APPLICATION_CREDENTIAL_ID}\",\"secret\":\"${OS_APPLICATION_CREDENTIAL_SECRET}\"}}}}" \
+                -D - -o /dev/null | sed -n 's/^[Xx]-[Ss]ubject-[Tt]oken: *//p' | tr -d '\r')
+
+              curl -sf -H "X-Auth-Token: ${TOKEN}" -H "Content-Type: application/json" \
+                -X PUT "http://192.168.11.77/compute/v2.1/os-quota-sets/${CLUSTER_PROJECT_ID}" \
+                -d '{"quota_set":{"instances":10,"cores":20,"ram":51200}}'
+
+              curl -sf -H "X-Auth-Token: ${TOKEN}" -H "Content-Type: application/json" \
+                -X PUT "http://192.168.11.77/networking/v2.0/quotas/${CLUSTER_PROJECT_ID}" \
+                -d '{"quota":{"network":5,"subnet":5,"port":20}}'
+
+              echo "quota set"

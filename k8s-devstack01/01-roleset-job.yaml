@@ -1,0 +1,58 @@
+# One-shot: registers the "k8s-devstack01-member" roleset in OpenBao so
+# openstack/creds/k8s-devstack01-member (read by 02-external-secret.yaml)
+# has something to mint credentials from. Same pattern as
+# templates/cluster-chart/templates/vault-roleset-job.yaml, de-templated
+# for a hand-applied (non-Helm) cluster. Authenticates as the shared
+# cluster-bootstrapper ServiceAccount (openbao/04-rbac.yaml) against a
+# write-only OpenBao role — can create rolesets, cannot read credentials.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: roleset-k8s-devstack01
+  namespace: openbao
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: cluster-bootstrapper
+      restartPolicy: Never
+      containers:
+        - name: ensure-roleset
+          image: curlimages/curl:8.11.1
+          env:
+            - name: VAULT_ADDR
+              value: "http://openbao.openbao.svc.cluster.local:8200"
+            - name: MOUNT_PATH
+              value: "kubernetes"
+            - name: VAULT_ROLE
+              value: "cluster-bootstrapper"
+            - name: ROLESET_NAME
+              value: "k8s-devstack01-member"
+            - name: PROJECT_ID
+              value: "414778abdb234133acc2b4b95131074d"
+            - name: MEMBER_ROLE_ID
+              value: "a1955513adf147528c15cf4d2b9393ef"
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+
+              LOGIN_RESP=$(curl -sf -X POST "${VAULT_ADDR}/v1/auth/${MOUNT_PATH}/login" \
+                -d "{\"jwt\":\"${JWT}\",\"role\":\"${VAULT_ROLE}\"}")
+              CLIENT_TOKEN=$(echo "$LOGIN_RESP" | sed -n 's/.*"client_token":"\([^"]*\)".*/\1/p')
+              if [ -z "$CLIENT_TOKEN" ]; then
+                echo "kubernetes auth login failed: $LOGIN_RESP" >&2
+                exit 1
+              fi
+
+              ROLES_JSON="[{\"id\":\"${MEMBER_ROLE_ID}\"}]"
+              ROLES_ESCAPED=$(echo "$ROLES_JSON" | sed 's/"/\\"/g')
+
+              curl -sf -H "X-Vault-Token: ${CLIENT_TOKEN}" \
+                -X POST "${VAULT_ADDR}/v1/openstack/roleset/${ROLESET_NAME}" \
+                -d "{\"project_id\":\"${PROJECT_ID}\",\"roles\":\"${ROLES_ESCAPED}\"}"
+
+              echo "roleset ${ROLESET_NAME} ensured"

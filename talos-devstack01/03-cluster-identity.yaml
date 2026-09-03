@@ -1,0 +1,8 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OpenStackClusterIdentity
+metadata:
+  name: talos-devstack01
+spec:
+  secretRef:
+    name: talos-devstack01-clouds
+    namespace: talos-devstack01

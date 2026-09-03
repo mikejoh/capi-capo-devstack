@@ -1,0 +1,124 @@
+# Minimal 1 CP + 1 worker Talos cluster — the Talos-flavored sibling of
+# k8s-devstack01/04-cluster.yaml. Swaps KubeadmControlPlane/
+# KubeadmConfigTemplate for TalosControlPlane/TalosConfigTemplate
+# (CABPT/CACPPT); OpenStackCluster/OpenStackMachineTemplate are unchanged
+# shape since CAPO doesn't care which bootstrap provider it's wrapping.
+# `generateType: controlplane`/`worker` is CACPPT/CABPT's own bare-minimum
+# form — no hand-written Talos machine config needed for this smoke test.
+# No sshKeyName anywhere: Talos has no SSH server.
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: talos-devstack01
+  namespace: talos-devstack01
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.8.0.0/16
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: TalosControlPlane
+    name: talos-devstack01-control-plane
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OpenStackCluster
+    name: talos-devstack01
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+kind: TalosControlPlane
+metadata:
+  name: talos-devstack01-control-plane
+  namespace: talos-devstack01
+spec:
+  version: v1.36.1
+  replicas: 1
+  infrastructureTemplate:
+    kind: OpenStackMachineTemplate
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    name: talos-devstack01-control-plane
+    namespace: talos-devstack01
+  controlPlaneConfig:
+    controlplane:
+      generateType: controlplane
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: TalosConfigTemplate
+metadata:
+  name: talos-devstack01-md-0
+  namespace: talos-devstack01
+spec:
+  template:
+    spec:
+      generateType: worker
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: talos-devstack01-md-0
+  namespace: talos-devstack01
+spec:
+  clusterName: talos-devstack01
+  replicas: 1
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: TalosConfigTemplate
+          name: talos-devstack01-md-0
+      clusterName: talos-devstack01
+      failureDomain: nova
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: talos-devstack01-md-0
+      version: v1.36.1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: talos-devstack01
+  namespace: talos-devstack01
+spec:
+  apiServerLoadBalancer:
+    enabled: true
+  externalNetwork:
+    id: 2979a016-a819-4d07-8e8f-f38633fd4b4d
+  identityRef:
+    type: ClusterIdentity
+    name: talos-devstack01
+    cloudName: openstack
+  managedSubnets:
+  - cidr: 10.6.3.0/24
+    dnsNameservers:
+    - 1.1.1.1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: talos-devstack01-control-plane
+  namespace: talos-devstack01
+spec:
+  template:
+    spec:
+      flavor: m1.medium
+      image:
+        filter:
+          name: talos-1.13.8-openstack
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: talos-devstack01-md-0
+  namespace: talos-devstack01
+spec:
+  template:
+    spec:
+      flavor: m1.medium
+      image:
+        filter:
+          name: talos-1.13.8-openstack

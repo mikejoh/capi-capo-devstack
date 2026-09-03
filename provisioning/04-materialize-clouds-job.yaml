@@ -1,0 +1,71 @@
+# One-shot: bridges the gap ORC leaves — ApplicationCredential's secretRef
+# only holds the raw credential *string* (key "value"), the id lives on the
+# CR's .status.id (not sensitive). Neither alone is a usable clouds.yaml.
+# This Job combines both into the actual clouds.yaml Secret
+# OpenStackClusterIdentity points at. Verified live against a real
+# ApplicationCredential this session — see
+# docs/least-privilege-openstack-credentials.md.
+#
+# Prerequisite: <cluster>-clouds must already exist (empty is fine) — this
+# Job's RBAC only grants update/patch, not create (see 00-rbac.yaml for why).
+# `hook: PostSync` guarantees this runs after every Sync-phase resource
+# (the ORC CRDs at wave 0, the RBAC/quota Jobs at wave 1) regardless of
+# sync-wave numbering — sync-wave only orders resources *within* a phase.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: materialize-clouds-<cluster>
+  namespace: <cluster>
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: openstack-provisioner
+      restartPolicy: Never
+      containers:
+        - name: materialize
+          image: bitnami/kubectl:1.35
+          env:
+            - name: CLUSTER
+              value: "<cluster>"
+            - name: APPCRED_CR_NAME
+              value: "<cluster>-appcred"
+            - name: RAW_SECRET_NAME
+              value: "<cluster>-appcred-raw"
+            - name: CLOUDS_SECRET_NAME
+              value: "<cluster>-clouds"
+            - name: AUTH_URL
+              value: "http://192.168.11.77/identity/v3"
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+
+              echo "waiting for ApplicationCredential/${APPCRED_CR_NAME} to become Available..."
+              until [ "$(kubectl -n "$CLUSTER" get applicationcredential "$APPCRED_CR_NAME" \
+                -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')" = "True" ]; do
+                sleep 5
+              done
+
+              APPCRED_ID=$(kubectl -n "$CLUSTER" get applicationcredential "$APPCRED_CR_NAME" -o jsonpath='{.status.id}')
+              APPCRED_SECRET=$(kubectl -n "$CLUSTER" get secret "$RAW_SECRET_NAME" -o jsonpath='{.data.value}' | base64 -d)
+
+              CLOUDS_YAML="clouds:
+                openstack:
+                  auth:
+                    auth_url: ${AUTH_URL}
+                    application_credential_id: \"${APPCRED_ID}\"
+                    application_credential_secret: \"${APPCRED_SECRET}\"
+                  auth_type: v3applicationcredential
+                  region_name: RegionOne
+                  identity_api_version: 3
+              "
+
+              kubectl -n "$CLUSTER" patch secret "$CLOUDS_SECRET_NAME" --type merge \
+                -p "{\"stringData\":{\"clouds.yaml\":\"$(printf '%s' "$CLOUDS_YAML" | sed 's/"/\\"/g')\"}}"
+
+              echo "materialized ${CLOUDS_SECRET_NAME}"

@@ -1,0 +1,81 @@
+# RBAC for the three Jobs in this dir that touch the Kubernetes API.
+#
+# openstack-provisioner: used by 02/03 (network-rbac, quota) to read the ORC
+# `Project` CR's real Keystone ID live instead of a hardcoded value, and by
+# 04 (materialize-clouds) to read the ApplicationCredential CR + patch the
+# two Secrets involved — deliberately not a blanket "secrets: *" grant.
+#
+# secrets-generator: used by 01 (generate-secrets, PreSync hook) — needs
+# actual `create` on secrets, unlike the other two. Kubernetes RBAC can't
+# scope `create` by resourceName (the object doesn't exist yet at
+# authorization time), so this is blanket-but-namespace-scoped rather than
+# named — a narrow, single-purpose per-cluster ServiceAccount, not a
+# cluster-wide component like ORC's own (which deliberately has no `create`
+# at all — see docs/least-privilege-openstack-credentials.md).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openstack-provisioner
+  namespace: <cluster>
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secrets-generator
+  namespace: <cluster>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openstack-provisioner
+  namespace: <cluster>
+rules:
+  - apiGroups: ["openstack.k-orc.cloud"]
+    resources: ["projects", "applicationcredentials"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["<cluster>-appcred-raw"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["<cluster>-clouds"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secrets-generator
+  namespace: <cluster>
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openstack-provisioner
+  namespace: <cluster>
+subjects:
+  - kind: ServiceAccount
+    name: openstack-provisioner
+    namespace: <cluster>
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openstack-provisioner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secrets-generator
+  namespace: <cluster>
+subjects:
+  - kind: ServiceAccount
+    name: secrets-generator
+    namespace: <cluster>
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: secrets-generator
