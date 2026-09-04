@@ -16,8 +16,8 @@ hand-writing manifests. Renders:
   `capo-poc/01-external-secret.yaml`, reading `openstack/creds/<cluster>-member`
 - `OpenStackClusterIdentity` pointing at the resulting Secret
 - a minimal, infra-only `OpenStackCluster`/`Cluster` (no
-  `MachineDeployment`/control plane — see README.md step 23 in the repo
-  root for going further)
+  `MachineDeployment`/control plane — see step 5 of
+  `../../docs/dynamic-openstack-credentials.md` for going further)
 
 ## Prerequisites (one-time, not per-cluster)
 

@@ -1,7 +1,7 @@
 # Least-privilege OpenStack credentials for cluster provisioning
 
 Design notes from a working session, condensed. Static credentials, no Vault/OpenBao —
-see the [secret0 bonus section](../README.md#bonus-no-static-per-cluster-openstack-password-secret0)
+see [dynamic-openstack-credentials.md](dynamic-openstack-credentials.md)
 for the dynamic-credential alternative and why we're deliberately not using it yet.
 
 ## The problem

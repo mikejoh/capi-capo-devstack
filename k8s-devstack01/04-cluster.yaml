@@ -1,5 +1,6 @@
-# Full bootable cluster (control plane + workers) — the "step 23" variant of
-# the tutorial's original root k8s-devstack01.yaml: same shape, but
+# Full bootable cluster (control plane + workers) — the dynamic-credential
+# variant (see step 5 of ../docs/dynamic-openstack-credentials.md) of the
+# tutorial's original root k8s-devstack01.yaml: same shape, but
 # identityRef points at the OpenStackClusterIdentity from
 # 03-cluster-identity.yaml (dynamic, OpenBao-minted credential) instead of a
 # static clouds.yaml Secret. Pod CIDR deliberately reuses 192.168.0.0/16 so

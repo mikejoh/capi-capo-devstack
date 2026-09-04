@@ -2,7 +2,7 @@
 # MachineDeployment/KubeadmControlPlane here. Swap this file for a full
 # clusterctl-generated set (with identityRef pointed at the
 # OpenStackClusterIdentity above instead of a raw Secret) once you're ready
-# to boot real nodes — see README.md step 23.
+# to boot real nodes — see step 5 of ../../../docs/dynamic-openstack-credentials.md.
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OpenStackCluster
 metadata:
