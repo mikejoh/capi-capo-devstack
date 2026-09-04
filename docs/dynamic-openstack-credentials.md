@@ -1,11 +1,11 @@
 # Dynamic OpenStack credentials with OpenBao (no static "secret0")
 
-Builds on the [main walkthrough](../README.md) (steps 1-18). That walkthrough
-uses a hand-filled `clouds.yaml` with a real username/password (step 9) —
-fine for a first pass, but it's exactly the pattern ("one OpenStack user
-account per cluster, password that never expires") a real platform shouldn't
-do long-term. This doc swaps that static credential for one minted on
-demand, short-lived, by [OpenBao](https://openbao.org/) + VEXXHOST's
+Required step in the [main walkthrough](../README.md) (its step 7) — this
+tutorial has no hand-filled `clouds.yaml` with a static, non-expiring
+OpenStack password anywhere ("one OpenStack user account per cluster,
+password that never expires" is exactly the pattern a real platform
+shouldn't do long-term). Every OpenStack credential the tutorial uses is
+minted on demand, short-lived, by [OpenBao](https://openbao.org/) + VEXXHOST's
 [`vault-plugin-secrets-openstack`](https://github.com/vexxhost/vault-plugin-secrets-openstack),
 delivered via [External Secrets Operator](https://external-secrets.io/)'s
 `VaultDynamicSecret` generator, consumed by CAPO's
@@ -57,10 +57,13 @@ for an alternative that keeps a static root credential instead of OpenBao.
      -n external-secrets --create-namespace --set installCRDs=true
    ```
 
-4. Apply the consumer side — generator, `ExternalSecret`,
-   `OpenStackClusterIdentity`, and a minimal infra-only `OpenStackCluster`/
-   `Cluster` (no `MachineDeployment`/control plane on purpose — this
-   proves the credential path, not a bootable node):
+4. Optional sanity check — apply the consumer side — generator,
+   `ExternalSecret`, `OpenStackClusterIdentity`, and a minimal infra-only
+   `OpenStackCluster`/`Cluster` (no `MachineDeployment`/control plane on
+   purpose — this proves the credential path, not a bootable node). Skip
+   this if you're heading straight to the real target, the Talos cluster
+   in the main walkthrough's step 9 — that's the same proof, on real
+   infrastructure:
 
    ```bash
    kubectl apply -f capo-poc/
@@ -84,25 +87,16 @@ for an alternative that keeps a static root credential instead of OpenBao.
    once their lease expires — Vault/OpenBao revokes them in Keystone, not
    just locally.
 
-5. To go further: swap the minimal `OpenStackCluster` for a full
-   `Cluster`+`KubeadmControlPlane`+`MachineDeployment` (steps 6-12 of the
-   main walkthrough, minus the `clouds.yaml` step — point `identityRef` at
-   the `OpenStackClusterIdentity` from step 4 instead) once you've built a
-   real node image, and this whole tutorial runs with zero static,
-   non-expiring OpenStack credentials anywhere except the one root
-   identity from step 1. `k8s-devstack01/` in this repo is exactly that
-   variant of the kubeadm path, dynamic credential included, 1
-   control-plane + 1 worker.
+**Gotcha if `apiServerLoadBalancer.enabled: true`:** `capo-poc`'s
+infra-only `OpenStackCluster` never creates an Octavia load balancer, so it
+never noticed this — but `capo-controller`'s reconcile holds one
+authenticated client for the whole reconcile, including its internal LB
+active-wait poll (~2min observed on this DevStack). The original 120s lease
+TTL in `openbao/setup.sh` was too close to that window — Vault could revoke
+the credential mid-poll, failing with a confusing 404 `Could not find
+Application Credential` instead of a clean retry. Bumped to 300s for this
+reason; if your Octavia is slower, go higher. This applies to
+`talos-devstack01/` too (also `apiServerLoadBalancer.enabled: true`).
 
-   **Gotcha if `apiServerLoadBalancer.enabled: true`:** `capo-poc`'s
-   infra-only `OpenStackCluster` never creates an Octavia load balancer, so
-   it never noticed this — but `capo-controller`'s reconcile holds one
-   authenticated client for the whole reconcile, including its internal
-   LB active-wait poll (~2min observed on this DevStack). The original
-   120s lease TTL in `openbao/setup.sh` was too close to that window —
-   Vault could revoke the credential mid-poll, failing with a confusing
-   404 `Could not find Application Credential` instead of a clean retry.
-   Bumped to 300s for this reason; if your Octavia is slower, go higher.
-
-Next: [Talos instead of kubeadm](talos-instead-of-kubeadm.md) reuses this
-same OpenBao/ESO chain with a different node OS.
+Next: back to the [main walkthrough](../README.md), step 8, to get a Talos
+node image and apply the real cluster.

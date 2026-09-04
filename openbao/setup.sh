@@ -73,7 +73,7 @@ bexec env BAO_TOKEN="$ROOT_TOKEN" bao write auth/kubernetes/role/eso \
 # cluster-bootstrapper: write-only roleset creation, used by every
 # per-cluster chart release's pre-install Job (templates/cluster-chart/
 # templates/vault-roleset-job.yaml) and by hand-applied clusters (e.g.
-# k8s-devstack01/01-roleset-job.yaml). Deliberately narrower than "eso"
+# talos-devstack01/01-roleset-job.yaml). Deliberately narrower than "eso"
 # above — can create/update rolesets, cannot read any credential.
 bexec_i env BAO_TOKEN="$ROOT_TOKEN" bao policy write cluster-bootstrapper-write - <<'EOF'
 path "openstack/roleset/*" {
